@@ -1,10 +1,10 @@
 module faynoSync-cli
 
-go 1.21.1
-
-require gopkg.in/yaml.v3 v3.0.1
+go 1.25.5
 
 require (
-	github.com/sirupsen/logrus v1.9.4 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	github.com/sirupsen/logrus v1.9.4
+	gopkg.in/yaml.v3 v3.0.1
 )
+
+require golang.org/x/sys v0.13.0 // indirect

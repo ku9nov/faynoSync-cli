@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,11 +13,21 @@ import (
 const (
 	DefaultServer = "https://example.com"
 	DefaultOwner  = "example"
+
+	EnvToken   = "FAYNOSYNC_TOKEN"
+	EnvURL     = "FAYNOSYNC_URL"
+	EnvAccount = "FAYNOSYNC_ACCOUNT"
 )
 
 type Config struct {
 	Server string `yaml:"server"`
 	Owner  string `yaml:"owner"`
+}
+
+type RuntimeConfig struct {
+	Token  string
+	Server string
+	Owner  string
 }
 
 func Default() Config {
@@ -97,4 +108,48 @@ func UpdateField(cfg *Config, key, value string) error {
 
 func Marshal(cfg Config) ([]byte, error) {
 	return yaml.Marshal(cfg)
+}
+
+func LoadRuntime() (RuntimeConfig, string, error) {
+	token := strings.TrimSpace(os.Getenv(EnvToken))
+	if token == "" {
+		return RuntimeConfig{}, "", fmt.Errorf("%s is required", EnvToken)
+	}
+
+	envServer := strings.TrimSpace(os.Getenv(EnvURL))
+	envOwner := strings.TrimSpace(os.Getenv(EnvAccount))
+	needsConfig := envServer == "" || envOwner == ""
+
+	cfg := Config{}
+	path := ""
+	if needsConfig {
+		var err error
+		cfg, path, err = Load()
+		if err != nil {
+			return RuntimeConfig{}, "", err
+		}
+	}
+
+	server := envServer
+	if server == "" {
+		server = strings.TrimSpace(cfg.Server)
+	}
+
+	owner := envOwner
+	if owner == "" {
+		owner = strings.TrimSpace(cfg.Owner)
+	}
+
+	if server == "" {
+		return RuntimeConfig{}, path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
+	}
+	if owner == "" {
+		return RuntimeConfig{}, path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
+	}
+
+	return RuntimeConfig{
+		Token:  token,
+		Server: server,
+		Owner:  owner,
+	}, path, nil
 }

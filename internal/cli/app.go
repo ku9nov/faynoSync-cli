@@ -41,6 +41,8 @@ func (a *App) Run(args []string) error {
 		return a.initConfig()
 	case "config":
 		return a.runConfig(args[1:])
+	case "upload":
+		return a.runUpload(args[1:])
 	case "-h", "--help", "help":
 		a.printRootUsage()
 		return nil
@@ -193,7 +195,8 @@ Global flags:
 Commands:
   faynosync init
   faynosync config view
-  faynosync config set <server|owner> [value]`)
+  faynosync config set <server|owner> [value]
+  faynosync upload [flags]`)
 }
 
 func (a *App) printConfigUsage() {
