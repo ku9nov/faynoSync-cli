@@ -101,7 +101,7 @@ go run main.go upload \
 - added ${feature}
 EOF
 
-# It is highly recommended to use 'EOF' (quoted heredoc delimiter) because shells may try to parse parameter expansion before here-doc formation
+# Sometimes it's recommended to use 'EOF' (quoted heredoc delimiter) because shells may try to parse parameter expansion before here-doc formation
 go run main.go upload \
   --app=cli \
   --file=./faynoSync-cli \
@@ -123,9 +123,9 @@ EOF
 ## Build and run
 
 ```bash
-go build -o faynosync .
-./faynosync --log-level info init
-./faynosync config view
-./faynosync config set server https://updates.example.com
-./faynosync upload --file ./test.apk --app myapp --version 1.2.3 --publish
+go build -o faynosync-cli .
+./faynosync-cli --log-level info init
+./faynosync-cli config view
+./faynosync-cli config set server https://updates.example.com
+./faynosync-cli upload --file ./test.apk --app myapp --version 1.2.3 --publish
 ```
