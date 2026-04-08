@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -38,6 +40,8 @@ type checkVersionResponse struct {
 	UpdateAvailable  bool   `json:"update_available"`
 	UpdateURL        string `json:"update_url"`
 }
+
+var installDownloadedArtifactFn = installDownloadedArtifact
 
 func Run(input Input) error {
 	if input.Logger == nil {
@@ -157,6 +161,14 @@ func Run(input Input) error {
 		"tuf":        runtimeCfg.TUF,
 	}).Info("update artifact downloaded")
 
+	if err := installDownloadedArtifactFn(downloadPath); err != nil {
+		return fmt.Errorf("install downloaded artifact: %w", err)
+	}
+
+	input.Logger.WithFields(logrus.Fields{
+		"path": downloadPath,
+	}).Info("cli binary updated")
+
 	return nil
 }
 
@@ -200,4 +212,45 @@ func pickExtendedUpdateURL(raw map[string]json.RawMessage) string {
 	}
 
 	return ""
+}
+
+func installDownloadedArtifact(downloadPath string) error {
+	executablePath, err := resolveCurrentExecutablePath()
+	if err != nil {
+		return err
+	}
+
+	return replaceBinaryWithMode(downloadPath, executablePath)
+}
+
+func resolveCurrentExecutablePath() (string, error) {
+	executablePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(executablePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve executable symlink: %w", err)
+	}
+
+	return resolvedPath, nil
+}
+
+func replaceBinaryWithMode(downloadPath, executablePath string) error {
+	executableInfo, err := os.Stat(executablePath)
+	if err != nil {
+		return fmt.Errorf("stat current executable: %w", err)
+	}
+
+	// Preserve permission bits from the currently installed binary.
+	if err := os.Chmod(downloadPath, executableInfo.Mode().Perm()); err != nil {
+		return fmt.Errorf("apply executable mode to downloaded artifact: %w", err)
+	}
+
+	if err := os.Rename(downloadPath, executablePath); err != nil {
+		return fmt.Errorf("atomically replace executable: %w", err)
+	}
+
+	return nil
 }

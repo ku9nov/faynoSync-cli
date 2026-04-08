@@ -3,7 +3,6 @@ module faynoSync-cli
 go 1.25.5
 
 require (
-	github.com/go-logr/stdr v1.2.2
 	github.com/sigstore/sigstore v1.10.4
 	github.com/sirupsen/logrus v1.9.4
 	github.com/theupdateframework/go-tuf/v2 v2.4.1
@@ -12,7 +11,6 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/google/go-containerregistry v0.20.7 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0 // indirect

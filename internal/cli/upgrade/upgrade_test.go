@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,12 @@ import (
 )
 
 func TestRunUpdateAvailable(t *testing.T) {
+	originalInstall := installDownloadedArtifactFn
+	installDownloadedArtifactFn = func(_ string) error { return nil }
+	t.Cleanup(func() {
+		installDownloadedArtifactFn = originalInstall
+	})
+
 	var gotQuery map[string]string
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +88,12 @@ func TestRunUpdateAvailable(t *testing.T) {
 }
 
 func TestRunUpdateAvailableWithTUFEnabled(t *testing.T) {
+	originalInstall := installDownloadedArtifactFn
+	installDownloadedArtifactFn = func(_ string) error { return nil }
+	t.Cleanup(func() {
+		installDownloadedArtifactFn = originalInstall
+	})
+
 	targetName := "faynosync-cli-admin/stable/darwin/arm64/faynosync-cli-1.0.0"
 	targetContent := []byte("signed-binary-content")
 
@@ -246,6 +259,84 @@ func TestRunServerErrorStatus(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "checkVersion failed with status 500") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunInstallError(t *testing.T) {
+	originalInstall := installDownloadedArtifactFn
+	installDownloadedArtifactFn = func(_ string) error {
+		return errors.New("replace failed")
+	}
+	t.Cleanup(func() {
+		installDownloadedArtifactFn = originalInstall
+	})
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checkVersion":
+			_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/files/faynosync-cli-1.0.1"}`, srv.URL)
+		case "/files/faynosync-cli-1.0.1":
+			_, _ = fmt.Fprint(w, "binary-content")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	logger, _ := newTestLogger()
+	withTestConfig(t, srv.URL, "admin")
+	t.Setenv(config.EnvToken, "")
+
+	err := Run(Input{
+		Logger:  logger,
+		Version: "1.0.0",
+		Channel: "stable",
+	})
+	if err == nil {
+		t.Fatal("expected install error")
+	}
+	if !strings.Contains(err.Error(), "install downloaded artifact") {
+		t.Fatalf("unexpected error wrapper: %v", err)
+	}
+	if !strings.Contains(err.Error(), "replace failed") {
+		t.Fatalf("unexpected install error detail: %v", err)
+	}
+}
+
+func TestReplaceBinaryWithMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	currentPath := filepath.Join(tmpDir, "faynosync-cli")
+	downloadPath := filepath.Join(tmpDir, "faynosync-cli.new")
+
+	if err := os.WriteFile(currentPath, []byte("old-binary"), 0o600); err != nil {
+		t.Fatalf("write current executable: %v", err)
+	}
+	if err := os.Chmod(currentPath, 0o751); err != nil {
+		t.Fatalf("chmod current executable: %v", err)
+	}
+	if err := os.WriteFile(downloadPath, []byte("new-binary"), 0o644); err != nil {
+		t.Fatalf("write downloaded artifact: %v", err)
+	}
+
+	if err := replaceBinaryWithMode(downloadPath, currentPath); err != nil {
+		t.Fatalf("replaceBinaryWithMode returned error: %v", err)
+	}
+
+	content, err := os.ReadFile(currentPath)
+	if err != nil {
+		t.Fatalf("read replaced executable: %v", err)
+	}
+	if string(content) != "new-binary" {
+		t.Fatalf("unexpected executable content: %q", string(content))
+	}
+
+	info, err := os.Stat(currentPath)
+	if err != nil {
+		t.Fatalf("stat replaced executable: %v", err)
+	}
+	if info.Mode().Perm() != 0o751 {
+		t.Fatalf("unexpected executable mode: got %o, want %o", info.Mode().Perm(), os.FileMode(0o751))
 	}
 }
 
