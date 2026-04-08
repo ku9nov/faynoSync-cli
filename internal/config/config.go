@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -22,17 +23,20 @@ const (
 type Config struct {
 	Server string `yaml:"server"`
 	Owner  string `yaml:"owner"`
+	TUF    bool   `yaml:"tuf"`
 }
 
 type RuntimeConfig struct {
 	Token  string
 	Server string
 	Owner  string
+	TUF    bool
 }
 
 type PublicRuntimeConfig struct {
 	Server string
 	Owner  string
+	TUF    bool
 }
 
 func Default() Config {
@@ -104,8 +108,14 @@ func UpdateField(cfg *Config, key, value string) error {
 		cfg.Server = value
 	case "owner":
 		cfg.Owner = value
+	case "tuf":
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("invalid value for tuf: %q (expected true/false)", value)
+		}
+		cfg.TUF = parsed
 	default:
-		return fmt.Errorf("unknown key: %s (allowed: server, owner)", key)
+		return fmt.Errorf("unknown key: %s (allowed: server, owner, tuf)", key)
 	}
 
 	return nil
@@ -121,7 +131,7 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 		return RuntimeConfig{}, "", fmt.Errorf("%s is required", EnvToken)
 	}
 
-	server, owner, path, err := resolveServerAndOwner()
+	server, owner, tuf, path, err := resolveServerAndOwnerAndTUF()
 	if err != nil {
 		return RuntimeConfig{}, path, err
 	}
@@ -130,11 +140,12 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 		Token:  token,
 		Server: server,
 		Owner:  owner,
+		TUF:    tuf,
 	}, path, nil
 }
 
 func LoadPublicRuntime() (PublicRuntimeConfig, string, error) {
-	server, owner, path, err := resolveServerAndOwner()
+	server, owner, tuf, path, err := resolveServerAndOwnerAndTUF()
 	if err != nil {
 		return PublicRuntimeConfig{}, path, err
 	}
@@ -142,10 +153,11 @@ func LoadPublicRuntime() (PublicRuntimeConfig, string, error) {
 	return PublicRuntimeConfig{
 		Server: server,
 		Owner:  owner,
+		TUF:    tuf,
 	}, path, nil
 }
 
-func resolveServerAndOwner() (string, string, string, error) {
+func resolveServerAndOwnerAndTUF() (string, string, bool, string, error) {
 	envServer := strings.TrimSpace(os.Getenv(EnvURL))
 	envOwner := strings.TrimSpace(os.Getenv(EnvAccount))
 	needsConfig := envServer == "" || envOwner == ""
@@ -156,7 +168,7 @@ func resolveServerAndOwner() (string, string, string, error) {
 		var err error
 		cfg, path, err = Load()
 		if err != nil {
-			return "", "", "", err
+			return "", "", false, "", err
 		}
 	}
 
@@ -171,11 +183,11 @@ func resolveServerAndOwner() (string, string, string, error) {
 	}
 
 	if server == "" {
-		return "", "", path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
+		return "", "", false, path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
 	}
 	if owner == "" {
-		return "", "", path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
+		return "", "", false, path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
 	}
 
-	return server, owner, path, nil
+	return server, owner, cfg.TUF, path, nil
 }

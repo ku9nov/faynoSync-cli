@@ -18,17 +18,22 @@ import (
 
 func TestRunUpdateAvailable(t *testing.T) {
 	var gotQuery map[string]string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = map[string]string{}
-		for key, values := range r.URL.Query() {
-			if len(values) > 0 {
-				gotQuery[key] = values[0]
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checkVersion":
+			gotQuery = map[string]string{}
+			for key, values := range r.URL.Query() {
+				if len(values) > 0 {
+					gotQuery[key] = values[0]
+				}
 			}
-		}
-		if r.URL.Path != "/checkVersion" {
+			_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+		case "/files/faynosync-cli-1.0.0":
+			_, _ = fmt.Fprint(w, "binary-content")
+		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_, _ = fmt.Fprint(w, `{"critical":false,"update_available":true,"update_url":"https://updates.example/faynosync-cli-1.0.0"}`)
 	}))
 	defer srv.Close()
 
@@ -55,6 +60,45 @@ func TestRunUpdateAvailable(t *testing.T) {
 	logText := logOutput.String()
 	if !strings.Contains(logText, "update is available") {
 		t.Fatalf("expected update log message, got: %s", logText)
+	}
+	if !strings.Contains(logText, "update artifact downloaded") {
+		t.Fatalf("expected download log message, got: %s", logText)
+	}
+
+	tmpFile := filepath.Join(testConfigDir(t), "tmp", "faynosync-cli-1.0.0")
+	content, err := os.ReadFile(tmpFile)
+	if err != nil {
+		t.Fatalf("expected downloaded file at %s: %v", tmpFile, err)
+	}
+	if string(content) != "binary-content" {
+		t.Fatalf("unexpected downloaded content: %q", string(content))
+	}
+}
+
+func TestRunUpdateAvailableWithTUFEnabledReturnsStubError(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/checkVersion" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+	}))
+	defer srv.Close()
+
+	logger, _ := newTestLogger()
+	withTestConfigTUF(t, srv.URL, "admin", true)
+	t.Setenv(config.EnvToken, "")
+
+	err := Run(Input{
+		Logger:  logger,
+		Version: "0.9.0",
+		Channel: "stable",
+	})
+	if err == nil {
+		t.Fatal("expected tuf stub error")
+	}
+	if !strings.Contains(err.Error(), "tuf download is not implemented yet") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -188,6 +232,10 @@ func newTestLogger() (*logrus.Logger, *bytes.Buffer) {
 }
 
 func withTestConfig(t *testing.T, serverURL, owner string) {
+	withTestConfigTUF(t, serverURL, owner, false)
+}
+
+func withTestConfigTUF(t *testing.T, serverURL, owner string, tuf bool) {
 	t.Helper()
 
 	tempHome := t.TempDir()
@@ -200,10 +248,15 @@ func withTestConfig(t *testing.T, serverURL, owner string) {
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatalf("create config dir: %v", err)
 	}
-	content := fmt.Sprintf("server: %s\nowner: %s\n", serverURL, owner)
+	content := fmt.Sprintf("server: %s\nowner: %s\ntuf: %t\n", serverURL, owner, tuf)
 	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+}
+
+func testConfigDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(os.Getenv("HOME"), ".faynosync")
 }
 
 func assertQuery(t *testing.T, query map[string]string, key, want string) {

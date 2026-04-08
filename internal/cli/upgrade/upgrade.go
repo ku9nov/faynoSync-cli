@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,10 +19,11 @@ import (
 )
 
 const (
-	defaultAppName = "faynosync-cli"
-	defaultVersion = "dev"
-	defaultChannel = "stable"
-	maxBodySize    = 1 << 20
+	defaultAppName  = "faynosync-cli"
+	defaultVersion  = "dev"
+	defaultChannel  = "stable"
+	maxBodySize     = 1 << 20
+	maxDownloadSize = 512 << 20
 )
 
 type Input struct {
@@ -126,9 +128,34 @@ func Run(input Input) error {
 		input.Logger.WithFields(fields).Info("update is available")
 	case result.PossibleRollback:
 		input.Logger.WithFields(fields).Warn("possible rollback detected")
+		return nil
 	default:
 		input.Logger.WithFields(fields).Info("current version is up-to-date")
+		return nil
 	}
+
+	if strings.TrimSpace(result.UpdateURL) == "" {
+		return errors.New("update is available but update_url is empty")
+	}
+
+	downloadCtx, downloadCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer downloadCancel()
+
+	var downloadPath string
+	if runtimeCfg.TUF {
+		downloadPath, err = downloadWithTUF(downloadCtx, result.UpdateURL)
+	} else {
+		downloadPath, err = downloadDirect(downloadCtx, result.UpdateURL)
+	}
+	if err != nil {
+		return err
+	}
+
+	input.Logger.WithFields(logrus.Fields{
+		"update_url": result.UpdateURL,
+		"path":       downloadPath,
+		"tuf":        runtimeCfg.TUF,
+	}).Info("update artifact downloaded")
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	upgradecmd "faynoSync-cli/internal/cli/upgrade"
@@ -113,9 +114,15 @@ func (a *App) initConfig() error {
 		return err
 	}
 	a.logger.WithField("owner", owner).Debug("Owner value")
+	tuf, err := a.promptBoolWithDefault("tuf", false)
+	if err != nil {
+		return err
+	}
+	a.logger.WithField("tuf", tuf).Debug("TUF value")
 	path, err = config.Init(config.Config{
 		Server: server,
 		Owner:  owner,
+		TUF:    tuf,
 	})
 	if err != nil {
 		return err
@@ -142,7 +149,7 @@ func (a *App) viewConfig() error {
 
 func (a *App) setConfig(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: faynosync config set <server|owner> [value]")
+		return errors.New("usage: faynosync config set <server|owner|tuf> [value]")
 	}
 
 	key := args[0]
@@ -205,6 +212,27 @@ func (a *App) promptValueWithDefault(key, defaultValue string) (string, error) {
 	return value, nil
 }
 
+func (a *App) promptBoolWithDefault(key string, defaultValue bool) (bool, error) {
+	_, _ = fmt.Fprintf(a.out, "Enter value for %s (true/false) [%t]: ", key, defaultValue)
+
+	line, err := a.br.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+
+	value := strings.TrimSpace(line)
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s value: %q (expected true/false)", key, value)
+	}
+
+	return parsed, nil
+}
+
 func (a *App) printRootUsage() {
 	_, _ = fmt.Fprintln(a.out, `faynosync CLI
 
@@ -218,7 +246,7 @@ Global flags:
 Commands:
   faynosync init
   faynosync config view
-  faynosync config set <server|owner> [value]
+  faynosync config set <server|owner|tuf> [value]
   faynosync upload [flags]
   faynosync upgrade
   faynosync version`)
@@ -229,7 +257,7 @@ func (a *App) printConfigUsage() {
 
 Usage:
   faynosync config view
-  faynosync config set <server|owner> [value]`)
+  faynosync config set <server|owner|tuf> [value]`)
 }
 
 func (a *App) printVersion() {

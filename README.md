@@ -18,20 +18,21 @@ Global flag:
 
 ### `faynosync init`
 
-Creates `~/.faynosync/config.yaml` and prompts for `server` and `owner`.
+Creates `~/.faynosync/config.yaml` and prompts for `server`, `owner`, and `tuf`.
 
 Default config:
 
 ```yaml
 server: https://example.com
 owner: example
+tuf: false
 ```
 
 ### `faynosync config view`
 
 Prints current config from `~/.faynosync/config.yaml`.
 
-### `faynosync config set <server|owner> [value]`
+### `faynosync config set <server|owner|tuf> [value]`
 
 Updates a config field. If `value` is not provided, CLI prompts for it.
 
