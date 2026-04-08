@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_upload_url: ${{ steps.create-release.outputs.upload_url }}
+      version: ${{ steps.extract-version.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -79,8 +80,14 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
+          VERSION: ${{ needs.create-release.outputs.version }}
+          COMMIT: ${{ github.sha }}
         run: |
-          go build -o "faynosync-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" .
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build \
+            -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE}" \
+            -o "faynosync-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" \
+            .
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1

@@ -14,19 +14,30 @@ import (
 )
 
 type App struct {
-	in     io.Reader
-	out    io.Writer
-	br     *bufio.Reader
-	logger *logrus.Logger
+	in        io.Reader
+	out       io.Writer
+	br        *bufio.Reader
+	logger    *logrus.Logger
+	buildInfo BuildInfo
+}
+
+type BuildInfo struct {
+	Version string
+	Commit  string
+	Date    string
 }
 
 func (a *App) Run(args []string) error {
-	levelName, remaining, err := parseGlobalFlags(args)
+	levelName, showVersion, remaining, err := parseGlobalFlags(args)
 	if err != nil {
 		return err
 	}
 	if err := a.setLogLevel(levelName); err != nil {
 		return err
+	}
+	if showVersion {
+		a.printVersion()
+		return nil
 	}
 
 	args = remaining
@@ -43,6 +54,9 @@ func (a *App) Run(args []string) error {
 		return a.runConfig(args[1:])
 	case "upload":
 		return a.runUpload(args[1:])
+	case "version":
+		a.printVersion()
+		return nil
 	case "-h", "--help", "help":
 		a.printRootUsage()
 		return nil
@@ -187,16 +201,18 @@ func (a *App) printRootUsage() {
 	_, _ = fmt.Fprintln(a.out, `faynosync CLI
 
 Usage:
-  faynosync [--log-level <level>] <command>
+  faynosync [--log-level <level>] [--version] <command>
 
 Global flags:
   --log-level <level>    trace|debug|info|warn|error|fatal|panic (default: info)
+  --version, -v          print build version information
 
 Commands:
   faynosync init
   faynosync config view
   faynosync config set <server|owner> [value]
-  faynosync upload [flags]`)
+  faynosync upload [flags]
+  faynosync version`)
 }
 
 func (a *App) printConfigUsage() {
@@ -205,4 +221,14 @@ func (a *App) printConfigUsage() {
 Usage:
   faynosync config view
   faynosync config set <server|owner> [value]`)
+}
+
+func (a *App) printVersion() {
+	_, _ = fmt.Fprintf(
+		a.out,
+		"version=%s commit=%s date=%s\n",
+		a.buildInfo.Version,
+		a.buildInfo.Commit,
+		a.buildInfo.Date,
+	)
 }

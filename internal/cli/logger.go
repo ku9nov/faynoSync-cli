@@ -9,9 +9,26 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func New(in io.Reader, out io.Writer) *App {
+func New(in io.Reader, out io.Writer, buildInfoOverride ...BuildInfo) *App {
 	if in == nil || out == nil {
 		panic("cli.New: in and out must not be nil")
+	}
+	buildInfo := BuildInfo{
+		Version: "dev",
+		Commit:  "none",
+		Date:    "unknown",
+	}
+	if len(buildInfoOverride) > 0 {
+		buildInfo = buildInfoOverride[0]
+	}
+	if buildInfo.Version == "" {
+		buildInfo.Version = "dev"
+	}
+	if buildInfo.Commit == "" {
+		buildInfo.Commit = "none"
+	}
+	if buildInfo.Date == "" {
+		buildInfo.Date = "unknown"
 	}
 	logger := logrus.New()
 	logger.SetOutput(out)
@@ -21,10 +38,11 @@ func New(in io.Reader, out io.Writer) *App {
 	})
 
 	return &App{
-		in:     in,
-		out:    out,
-		br:     bufio.NewReader(in),
-		logger: logger,
+		in:        in,
+		out:       out,
+		br:        bufio.NewReader(in),
+		logger:    logger,
+		buildInfo: buildInfo,
 	}
 }
 
