@@ -14,10 +14,6 @@ import (
 	"strings"
 )
 
-func downloadWithTUF(_ context.Context, _ string) (string, error) {
-	return "", errors.New("tuf download is not implemented yet")
-}
-
 func downloadDirect(ctx context.Context, updateURL string) (string, error) {
 	filename, err := filenameFromURL(updateURL)
 	if err != nil {
