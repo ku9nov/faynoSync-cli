@@ -30,6 +30,11 @@ type RuntimeConfig struct {
 	Owner  string
 }
 
+type PublicRuntimeConfig struct {
+	Server string
+	Owner  string
+}
+
 func Default() Config {
 	return Config{
 		Server: DefaultServer,
@@ -116,6 +121,31 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 		return RuntimeConfig{}, "", fmt.Errorf("%s is required", EnvToken)
 	}
 
+	server, owner, path, err := resolveServerAndOwner()
+	if err != nil {
+		return RuntimeConfig{}, path, err
+	}
+
+	return RuntimeConfig{
+		Token:  token,
+		Server: server,
+		Owner:  owner,
+	}, path, nil
+}
+
+func LoadPublicRuntime() (PublicRuntimeConfig, string, error) {
+	server, owner, path, err := resolveServerAndOwner()
+	if err != nil {
+		return PublicRuntimeConfig{}, path, err
+	}
+
+	return PublicRuntimeConfig{
+		Server: server,
+		Owner:  owner,
+	}, path, nil
+}
+
+func resolveServerAndOwner() (string, string, string, error) {
 	envServer := strings.TrimSpace(os.Getenv(EnvURL))
 	envOwner := strings.TrimSpace(os.Getenv(EnvAccount))
 	needsConfig := envServer == "" || envOwner == ""
@@ -126,7 +156,7 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 		var err error
 		cfg, path, err = Load()
 		if err != nil {
-			return RuntimeConfig{}, "", err
+			return "", "", "", err
 		}
 	}
 
@@ -141,15 +171,11 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 	}
 
 	if server == "" {
-		return RuntimeConfig{}, path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
+		return "", "", path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
 	}
 	if owner == "" {
-		return RuntimeConfig{}, path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
+		return "", "", path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
 	}
 
-	return RuntimeConfig{
-		Token:  token,
-		Server: server,
-		Owner:  owner,
-	}, path, nil
+	return server, owner, path, nil
 }

@@ -82,10 +82,11 @@ jobs:
           CGO_ENABLED: 0
           VERSION: ${{ needs.create-release.outputs.version }}
           COMMIT: ${{ github.sha }}
+          CHANNEL: stable
         run: |
           BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           go build \
-            -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE}" \
+            -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_DATE} -X main.channel=${CHANNEL}" \
             -o "faynosync-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" \
             .
 

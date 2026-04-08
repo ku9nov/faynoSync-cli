@@ -11,6 +11,7 @@ var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
+	channel = "stable"
 )
 
 func main() {
@@ -18,6 +19,7 @@ func main() {
 		Version: version,
 		Commit:  commit,
 		Date:    date,
+		Channel: channel,
 	})
 	if err := app.Run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)

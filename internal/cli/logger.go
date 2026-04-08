@@ -17,6 +17,7 @@ func New(in io.Reader, out io.Writer, buildInfoOverride ...BuildInfo) *App {
 		Version: "dev",
 		Commit:  "none",
 		Date:    "unknown",
+		Channel: "stable",
 	}
 	if len(buildInfoOverride) > 0 {
 		buildInfo = buildInfoOverride[0]
@@ -29,6 +30,9 @@ func New(in io.Reader, out io.Writer, buildInfoOverride ...BuildInfo) *App {
 	}
 	if buildInfo.Date == "" {
 		buildInfo.Date = "unknown"
+	}
+	if buildInfo.Channel == "" {
+		buildInfo.Channel = "stable"
 	}
 	logger := logrus.New()
 	logger.SetOutput(out)

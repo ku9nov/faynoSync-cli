@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	upgradecmd "faynoSync-cli/internal/cli/upgrade"
 	"faynoSync-cli/internal/config"
 
 	"github.com/sirupsen/logrus"
@@ -25,6 +26,7 @@ type BuildInfo struct {
 	Version string
 	Commit  string
 	Date    string
+	Channel string
 }
 
 func (a *App) Run(args []string) error {
@@ -54,6 +56,12 @@ func (a *App) Run(args []string) error {
 		return a.runConfig(args[1:])
 	case "upload":
 		return a.runUpload(args[1:])
+	case "upgrade":
+		return upgradecmd.Run(upgradecmd.Input{
+			Logger:  a.logger,
+			Version: a.buildInfo.Version,
+			Channel: a.buildInfo.Channel,
+		})
 	case "version":
 		a.printVersion()
 		return nil
@@ -212,6 +220,7 @@ Commands:
   faynosync config view
   faynosync config set <server|owner> [value]
   faynosync upload [flags]
+  faynosync upgrade
   faynosync version`)
 }
 
