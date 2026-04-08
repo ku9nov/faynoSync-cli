@@ -23,7 +23,7 @@ const (
 	defaultVersion  = "dev"
 	defaultChannel  = "stable"
 	maxBodySize     = 1 << 20
-	maxDownloadSize = 512 << 20
+	maxDownloadSize = 128 << 20
 )
 
 type Input struct {

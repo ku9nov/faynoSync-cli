@@ -2,6 +2,8 @@ package upgrade
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/ed25519"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,10 +12,13 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"faynoSync-cli/internal/config"
 
+	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sirupsen/logrus"
+	tufmetadata "github.com/theupdateframework/go-tuf/v2/metadata"
 )
 
 func TestRunUpdateAvailable(t *testing.T) {
@@ -75,14 +80,20 @@ func TestRunUpdateAvailable(t *testing.T) {
 	}
 }
 
-func TestRunUpdateAvailableWithTUFEnabledReturnsStubError(t *testing.T) {
+func TestRunUpdateAvailableWithTUFEnabled(t *testing.T) {
+	targetName := "faynosync-cli-admin/stable/darwin/arm64/faynosync-cli-1.0.0"
+	targetContent := []byte("signed-binary-content")
+
+	repoRoot := t.TempDir()
+	createTUFRepoFixture(t, repoRoot, "admin", "faynosync-cli", targetName, targetContent)
+
+	mux := http.NewServeMux()
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/checkVersion" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
-	}))
+	mux.HandleFunc("/checkVersion", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/%s"}`, srv.URL, targetName)
+	})
+	mux.Handle("/", http.FileServer(http.Dir(repoRoot)))
+	srv = httptest.NewServer(mux)
 	defer srv.Close()
 
 	logger, _ := newTestLogger()
@@ -94,10 +105,26 @@ func TestRunUpdateAvailableWithTUFEnabledReturnsStubError(t *testing.T) {
 		Version: "0.9.0",
 		Channel: "stable",
 	})
-	if err == nil {
-		t.Fatal("expected tuf stub error")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "tuf download is not implemented yet") {
+
+	tmpFile := filepath.Join(testConfigDir(t), "tmp", "faynosync-cli-1.0.0")
+	content, readErr := os.ReadFile(tmpFile)
+	if readErr != nil {
+		t.Fatalf("expected downloaded file at %s: %v", tmpFile, readErr)
+	}
+	if string(content) != string(targetContent) {
+		t.Fatalf("unexpected downloaded content: %q", string(content))
+	}
+}
+
+func TestParseTUFUpdateURLRejectsURLWithoutHost(t *testing.T) {
+	_, _, _, _, err := parseTUFUpdateURL("faynosync-cli-admin/stable/darwin/arm64/faynosync-cli-1.0.0", "admin")
+	if err == nil {
+		t.Fatal("expected parse error for update_url without host")
+	}
+	if !strings.Contains(err.Error(), "scheme and host") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -264,5 +291,101 @@ func assertQuery(t *testing.T, query map[string]string, key, want string) {
 
 	if got := query[key]; got != want {
 		t.Fatalf("unexpected query %s: want %q, got %q", key, want, got)
+	}
+}
+
+func createTUFRepoFixture(t *testing.T, rootDir, owner, appName, targetName string, targetContent []byte) {
+	t.Helper()
+
+	targetFilePath := filepath.Join(rootDir, filepath.FromSlash(targetName))
+	if err := os.MkdirAll(filepath.Dir(targetFilePath), 0o755); err != nil {
+		t.Fatalf("create target directory: %v", err)
+	}
+	if err := os.WriteFile(targetFilePath, targetContent, 0o644); err != nil {
+		t.Fatalf("write target file: %v", err)
+	}
+
+	metadataDir := filepath.Join(rootDir, "tuf_metadata", owner, appName)
+	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+		t.Fatalf("create metadata directory: %v", err)
+	}
+
+	expires := time.Now().Add(24 * time.Hour).UTC()
+	root := tufmetadata.Root(expires)
+	root.Signed.ConsistentSnapshot = false
+	targets := tufmetadata.Targets(expires)
+	snapshot := tufmetadata.Snapshot(expires)
+	timestamp := tufmetadata.Timestamp(expires)
+
+	keys := map[string]ed25519.PrivateKey{}
+	for _, role := range []string{"root", "targets", "snapshot", "timestamp"} {
+		_, privateKey, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			t.Fatalf("generate %s key: %v", role, err)
+		}
+		keys[role] = privateKey
+
+		publicKey, err := tufmetadata.KeyFromPublicKey(privateKey.Public())
+		if err != nil {
+			t.Fatalf("convert %s public key: %v", role, err)
+		}
+		if err := root.Signed.AddKey(publicKey, role); err != nil {
+			t.Fatalf("add %s key to root: %v", role, err)
+		}
+	}
+
+	targetInfo, err := tufmetadata.TargetFile().FromFile(targetFilePath, "sha256")
+	if err != nil {
+		t.Fatalf("build target file metadata: %v", err)
+	}
+	targets.Signed.Targets[targetName] = targetInfo
+
+	snapshot.Signed.Meta["targets.json"] = tufmetadata.MetaFile(targets.Signed.Version)
+	timestamp.Signed.Meta["snapshot.json"] = tufmetadata.MetaFile(snapshot.Signed.Version)
+
+	signRole := func(name string, signed any) {
+		signer, err := signature.LoadSigner(keys[name], crypto.Hash(0))
+		if err != nil {
+			t.Fatalf("load %s signer: %v", name, err)
+		}
+
+		switch md := signed.(type) {
+		case *tufmetadata.Metadata[tufmetadata.RootType]:
+			if _, err := md.Sign(signer); err != nil {
+				t.Fatalf("sign %s metadata: %v", name, err)
+			}
+		case *tufmetadata.Metadata[tufmetadata.TargetsType]:
+			if _, err := md.Sign(signer); err != nil {
+				t.Fatalf("sign %s metadata: %v", name, err)
+			}
+		case *tufmetadata.Metadata[tufmetadata.SnapshotType]:
+			if _, err := md.Sign(signer); err != nil {
+				t.Fatalf("sign %s metadata: %v", name, err)
+			}
+		case *tufmetadata.Metadata[tufmetadata.TimestampType]:
+			if _, err := md.Sign(signer); err != nil {
+				t.Fatalf("sign %s metadata: %v", name, err)
+			}
+		default:
+			t.Fatalf("unsupported metadata type for role %s", name)
+		}
+	}
+
+	signRole("root", root)
+	signRole("targets", targets)
+	signRole("snapshot", snapshot)
+	signRole("timestamp", timestamp)
+
+	if err := root.ToFile(filepath.Join(metadataDir, "1.root.json"), true); err != nil {
+		t.Fatalf("write root metadata: %v", err)
+	}
+	if err := targets.ToFile(filepath.Join(metadataDir, "targets.json"), true); err != nil {
+		t.Fatalf("write targets metadata: %v", err)
+	}
+	if err := snapshot.ToFile(filepath.Join(metadataDir, "snapshot.json"), true); err != nil {
+		t.Fatalf("write snapshot metadata: %v", err)
+	}
+	if err := timestamp.ToFile(filepath.Join(metadataDir, "timestamp.json"), true); err != nil {
+		t.Fatalf("write timestamp metadata: %v", err)
 	}
 }
