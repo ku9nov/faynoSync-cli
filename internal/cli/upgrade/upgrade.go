@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,8 @@ type Input struct {
 	Logger  *logrus.Logger
 	Version string
 	Channel string
+	In      io.Reader
+	Out     io.Writer
 }
 
 type checkVersionResponse struct {
@@ -132,7 +135,15 @@ func Run(input Input) error {
 		input.Logger.WithFields(fields).Info("update is available")
 	case result.PossibleRollback:
 		input.Logger.WithFields(fields).Warn("possible rollback detected")
-		return nil
+		rollbackAllowed, err := promptRollbackConfirmation(input.In, input.Out, result.UpdateURL)
+		if err != nil {
+			return err
+		}
+		if !rollbackAllowed {
+			input.Logger.WithFields(fields).Info("rollback cancelled by user")
+			return nil
+		}
+		input.Logger.WithFields(fields).Info("rollback confirmed by user")
 	default:
 		input.Logger.WithFields(fields).Info("current version is up-to-date")
 		return nil
@@ -212,6 +223,30 @@ func pickExtendedUpdateURL(raw map[string]json.RawMessage) string {
 	}
 
 	return ""
+}
+
+func promptRollbackConfirmation(in io.Reader, out io.Writer, updateURL string) (bool, error) {
+	if in == nil || out == nil {
+		return false, nil
+	}
+
+	_, _ = fmt.Fprintf(out, "Possible rollback detected to %s. Continue with rollback? (y/N): ", strings.TrimSpace(updateURL))
+
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, fmt.Errorf("read rollback confirmation: %w", err)
+	}
+
+	answer := strings.ToLower(strings.TrimSpace(line))
+	switch answer {
+	case "y", "yes":
+		return true, nil
+	case "", "n", "no":
+		return false, nil
+	default:
+		_, _ = fmt.Fprintln(out, "Invalid response. Rollback cancelled.")
+		return false, nil
+	}
 }
 
 func installDownloadedArtifact(downloadPath string) error {

@@ -62,6 +62,8 @@ func (a *App) Run(args []string) error {
 			Logger:  a.logger,
 			Version: a.buildInfo.Version,
 			Channel: a.buildInfo.Channel,
+			In:      a.in,
+			Out:     a.out,
 		})
 	case "version":
 		a.printVersion()

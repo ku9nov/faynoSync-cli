@@ -165,26 +165,168 @@ func TestRunNoUpdate(t *testing.T) {
 	}
 }
 
-func TestRunPossibleRollback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"critical":false,"possible_rollback":true,"update_available":false,"update_url":"https://updates.example/faynosync-cli-1.0.0"}`)
+func TestRunPossibleRollbackConfirmed(t *testing.T) {
+	originalInstall := installDownloadedArtifactFn
+	installCalled := false
+	installDownloadedArtifactFn = func(_ string) error {
+		installCalled = true
+		return nil
+	}
+	t.Cleanup(func() {
+		installDownloadedArtifactFn = originalInstall
+	})
+
+	downloadRequested := false
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checkVersion":
+			_, _ = fmt.Fprintf(w, `{"critical":false,"possible_rollback":true,"update_available":false,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+		case "/files/faynosync-cli-1.0.0":
+			downloadRequested = true
+			_, _ = fmt.Fprint(w, "binary-content")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
 	}))
 	defer srv.Close()
 
 	logger, logOutput := newTestLogger()
+	promptOutput := bytes.NewBuffer(nil)
 	withTestConfig(t, srv.URL, "admin")
 
 	err := Run(Input{
 		Logger:  logger,
 		Version: "2.0.0",
 		Channel: "stable",
+		In:      strings.NewReader("y\n"),
+		Out:     promptOutput,
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	if !strings.Contains(logOutput.String(), "possible rollback detected") {
-		t.Fatalf("expected rollback warning log, got: %s", logOutput.String())
+	if !downloadRequested {
+		t.Fatal("expected rollback artifact download request")
+	}
+	if !installCalled {
+		t.Fatal("expected install to be called after rollback confirmation")
+	}
+
+	logText := logOutput.String()
+	if !strings.Contains(logText, "possible rollback detected") {
+		t.Fatalf("expected rollback warning log, got: %s", logText)
+	}
+	if !strings.Contains(logText, "rollback confirmed by user") {
+		t.Fatalf("expected rollback confirmation log, got: %s", logText)
+	}
+	if !strings.Contains(logText, "update artifact downloaded") {
+		t.Fatalf("expected download log message, got: %s", logText)
+	}
+
+	if !strings.Contains(promptOutput.String(), "Continue with rollback?") {
+		t.Fatalf("expected rollback prompt, got: %s", promptOutput.String())
+	}
+}
+
+func TestRunPossibleRollbackDeclined(t *testing.T) {
+	downloadRequested := false
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checkVersion":
+			_, _ = fmt.Fprintf(w, `{"critical":false,"possible_rollback":true,"update_available":false,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+		case "/files/faynosync-cli-1.0.0":
+			downloadRequested = true
+			_, _ = fmt.Fprint(w, "binary-content")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	logger, logOutput := newTestLogger()
+	promptOutput := bytes.NewBuffer(nil)
+	withTestConfig(t, srv.URL, "admin")
+
+	err := Run(Input{
+		Logger:  logger,
+		Version: "2.0.0",
+		Channel: "stable",
+		In:      strings.NewReader("n\n"),
+		Out:     promptOutput,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if downloadRequested {
+		t.Fatal("did not expect rollback artifact download when user declines")
+	}
+
+	logText := logOutput.String()
+	if !strings.Contains(logText, "possible rollback detected") {
+		t.Fatalf("expected rollback warning log, got: %s", logText)
+	}
+	if !strings.Contains(logText, "rollback cancelled by user") {
+		t.Fatalf("expected rollback cancellation log, got: %s", logText)
+	}
+}
+
+func TestRunPossibleRollbackDefaultDecline(t *testing.T) {
+	cases := []struct {
+		name                  string
+		userInput             string
+		expectInvalidResponse bool
+	}{
+		{name: "empty", userInput: "\n", expectInvalidResponse: false},
+		{name: "invalid", userInput: "maybe\n", expectInvalidResponse: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			downloadRequested := false
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/checkVersion":
+					_, _ = fmt.Fprintf(w, `{"critical":false,"possible_rollback":true,"update_available":false,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+				case "/files/faynosync-cli-1.0.0":
+					downloadRequested = true
+					_, _ = fmt.Fprint(w, "binary-content")
+				default:
+					t.Fatalf("unexpected path: %s", r.URL.Path)
+				}
+			}))
+			defer srv.Close()
+
+			logger, logOutput := newTestLogger()
+			promptOutput := bytes.NewBuffer(nil)
+			withTestConfig(t, srv.URL, "admin")
+
+			err := Run(Input{
+				Logger:  logger,
+				Version: "2.0.0",
+				Channel: "stable",
+				In:      strings.NewReader(tc.userInput),
+				Out:     promptOutput,
+			})
+			if err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+
+			if downloadRequested {
+				t.Fatal("did not expect rollback artifact download for default decline")
+			}
+
+			if !strings.Contains(logOutput.String(), "rollback cancelled by user") {
+				t.Fatalf("expected rollback cancellation log, got: %s", logOutput.String())
+			}
+
+			if tc.expectInvalidResponse && !strings.Contains(promptOutput.String(), "Invalid response. Rollback cancelled.") {
+				t.Fatalf("expected invalid response message, got: %s", promptOutput.String())
+			}
+		})
 	}
 }
 
