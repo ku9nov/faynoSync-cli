@@ -30,10 +30,12 @@ func TestRunUpdateAvailable(t *testing.T) {
 	})
 
 	var gotQuery map[string]string
+	gotDeviceID := ""
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/checkVersion":
+			gotDeviceID = strings.TrimSpace(r.Header.Get("X-Device-ID"))
 			gotQuery = map[string]string{}
 			for key, values := range r.URL.Query() {
 				if len(values) > 0 {
@@ -68,6 +70,9 @@ func TestRunUpdateAvailable(t *testing.T) {
 	assertQuery(t, gotQuery, "platform", runtime.GOOS)
 	assertQuery(t, gotQuery, "arch", runtime.GOARCH)
 	assertQuery(t, gotQuery, "owner", "admin")
+	if gotDeviceID == "" {
+		t.Fatal("expected X-Device-ID header to be set")
+	}
 
 	logText := logOutput.String()
 	if !strings.Contains(logText, "update is available") {
@@ -84,6 +89,53 @@ func TestRunUpdateAvailable(t *testing.T) {
 	}
 	if string(content) != "binary-content" {
 		t.Fatalf("unexpected downloaded content: %q", string(content))
+	}
+}
+
+func TestRunSendsStableDeviceIDAcrossRuns(t *testing.T) {
+	originalInstall := installDownloadedArtifactFn
+	installDownloadedArtifactFn = func(_ string) error { return nil }
+	t.Cleanup(func() {
+		installDownloadedArtifactFn = originalInstall
+	})
+
+	receivedIDs := make([]string, 0, 2)
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checkVersion":
+			receivedIDs = append(receivedIDs, strings.TrimSpace(r.Header.Get("X-Device-ID")))
+			_, _ = fmt.Fprintf(w, `{"critical":false,"update_available":true,"update_url":"%s/files/faynosync-cli-1.0.0"}`, srv.URL)
+		case "/files/faynosync-cli-1.0.0":
+			_, _ = fmt.Fprint(w, "binary-content")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	logger, _ := newTestLogger()
+	withTestConfig(t, srv.URL, "admin")
+
+	for i := 0; i < 2; i++ {
+		err := Run(Input{
+			Logger:  logger,
+			Version: "0.9.0",
+			Channel: "stable",
+		})
+		if err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+	}
+
+	if len(receivedIDs) != 2 {
+		t.Fatalf("expected 2 checkVersion requests, got %d", len(receivedIDs))
+	}
+	if receivedIDs[0] == "" || receivedIDs[1] == "" {
+		t.Fatalf("expected non-empty device ids, got %q and %q", receivedIDs[0], receivedIDs[1])
+	}
+	if receivedIDs[0] != receivedIDs[1] {
+		t.Fatalf("expected stable device id across runs, got %q and %q", receivedIDs[0], receivedIDs[1])
 	}
 }
 

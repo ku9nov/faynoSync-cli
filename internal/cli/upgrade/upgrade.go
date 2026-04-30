@@ -86,6 +86,11 @@ func Run(input Input) error {
 	if err != nil {
 		return err
 	}
+	deviceID, err := config.EnsureDeviceID()
+	if err != nil {
+		return fmt.Errorf("ensure device id: %w", err)
+	}
+	req.Header.Set("X-Device-ID", deviceID)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

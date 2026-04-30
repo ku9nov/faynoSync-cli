@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +16,7 @@ import (
 const (
 	DefaultServer = "https://example.com"
 	DefaultOwner  = "example"
+	deviceIDFile  = "device_id"
 
 	EnvToken   = "FAYNOSYNC_TOKEN"
 	EnvURL     = "FAYNOSYNC_URL"
@@ -54,6 +57,51 @@ func Path() (string, error) {
 
 	return filepath.Join(home, ".faynosync", "config.yaml"), nil
 }
+
+func EnsureDeviceID() (string, error) {
+	configPath, err := Path()
+	if err != nil {
+		return "", err
+	}
+
+	configDir := filepath.Dir(configPath)
+	devicePath := filepath.Join(configDir, deviceIDFile)
+
+	raw, err := os.ReadFile(devicePath)
+	if err == nil {
+		deviceID := strings.TrimSpace(string(raw))
+		if deviceID != "" {
+			return deviceID, nil
+		}
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return "", err
+	}
+
+	deviceID, err := generateDeviceID()
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.WriteFile(devicePath, []byte(deviceID+"\n"), 0o600); err != nil {
+		return "", err
+	}
+
+	return deviceID, nil
+}
+
+func generateDeviceID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
 func Init(cfg Config) (string, error) {
 	path, err := Path()
 	if err != nil {

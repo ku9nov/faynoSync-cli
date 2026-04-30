@@ -43,6 +43,10 @@ func (a *App) Run(args []string) error {
 		return nil
 	}
 
+	if _, err := config.EnsureDeviceID(); err != nil {
+		return fmt.Errorf("initialize device id: %w", err)
+	}
+
 	args = remaining
 
 	if len(args) == 0 {
