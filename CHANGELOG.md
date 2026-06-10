@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+- Added a persistent per-device ID, stored in the config directory and sent as the `X-Device-ID` header on update checks.
+- Switched update checks to the faynoSync Go SDK instead of direct HTTP calls.
+- Added optional edge/CDN support via an `edge` setting (`config set edge` or `FAYNOSYNC_EDGE`); update checks try the edge first and fall back to the API.
+- Logged the response `source` (edge or api) during upgrades.
+- Fixed `upload` to fail with a non-zero exit code when the server rejects the request.
+- Improved log readability with colorized, aligned, multi-line output (auto-disabled for non-terminals and when `NO_COLOR` is set).
+
 ## 0.12.0
 
 - Added a full self-update flow with explicit update checks and user-facing upgrade command integration.
