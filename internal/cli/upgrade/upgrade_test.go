@@ -428,7 +428,7 @@ func TestRunMalformedJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
-	if !strings.Contains(err.Error(), "decode checkVersion response") {
+	if !strings.Contains(err.Error(), "checkVersion request failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -451,7 +451,7 @@ func TestRunServerErrorStatus(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected status error")
 	}
-	if !strings.Contains(err.Error(), "checkVersion failed with status 500") {
+	if !strings.Contains(err.Error(), "returned HTTP 500") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

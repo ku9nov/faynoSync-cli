@@ -3,21 +3,18 @@ package upgrade
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
 	"faynoSync-cli/internal/config"
 
+	faynosync "github.com/ku9nov/faynosync-sdk-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,13 +32,6 @@ type Input struct {
 	Channel string
 	In      io.Reader
 	Out     io.Writer
-}
-
-type checkVersionResponse struct {
-	Critical         bool   `json:"critical"`
-	PossibleRollback bool   `json:"possible_rollback"`
-	UpdateAvailable  bool   `json:"update_available"`
-	UpdateURL        string `json:"update_url"`
 }
 
 var installDownloadedArtifactFn = installDownloadedArtifact
@@ -68,59 +58,34 @@ func Run(input Input) error {
 
 	platform := runtime.GOOS
 	arch := runtime.GOARCH
-	endpoint := strings.TrimRight(runtimeCfg.Server, "/") + "/checkVersion"
-	query := url.Values{
-		"app_name": {defaultAppName},
-		"version":  {version},
-		"channel":  {channel},
-		"platform": {platform},
-		"arch":     {arch},
-		"owner":    {runtimeCfg.Owner},
-	}
-	requestURL := endpoint + "?" + query.Encode()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-	if err != nil {
-		return err
-	}
 	deviceID, err := config.EnsureDeviceID()
 	if err != nil {
 		return fmt.Errorf("ensure device id: %w", err)
 	}
-	req.Header.Set("X-Device-ID", deviceID)
 
-	resp, err := http.DefaultClient.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client := faynosync.NewClient(faynosync.Config{BaseURL: runtimeCfg.Server})
+	result, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
+		Owner:    runtimeCfg.Owner,
+		AppName:  defaultAppName,
+		Version:  version,
+		Channel:  channel,
+		Platform: platform,
+		Arch:     arch,
+		DeviceID: deviceID,
+	})
 	if err != nil {
 		input.Logger.WithFields(map[string]any{
-			"url": requestURL,
-		}).Error("version check request failed")
+			"owner":    runtimeCfg.Owner,
+			"app_name": defaultAppName,
+		}).Error("version check failed")
 		return fmt.Errorf("checkVersion request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		input.Logger.WithFields(map[string]any{
-			"status": resp.StatusCode,
-			"body":   strings.TrimSpace(string(respBody)),
-		}).Error("version check failed")
-		return fmt.Errorf("checkVersion failed with status %d", resp.StatusCode)
-	}
-
-	result, err := decodeCheckVersionResponse(respBody)
-	if err != nil {
-		input.Logger.WithFields(map[string]any{
-			"body": strings.TrimSpace(string(respBody)),
-		}).Error("failed to decode version check response")
-		return fmt.Errorf("decode checkVersion response: %w", err)
-	}
+	updateURL := resolveUpdateURL(result)
 
 	fields := logrus.Fields{
 		"app_name":          defaultAppName,
@@ -132,7 +97,7 @@ func Run(input Input) error {
 		"update_available":  result.UpdateAvailable,
 		"possible_rollback": result.PossibleRollback,
 		"critical":          result.Critical,
-		"update_url":        result.UpdateURL,
+		"update_url":        updateURL,
 	}
 
 	switch {
@@ -140,7 +105,7 @@ func Run(input Input) error {
 		input.Logger.WithFields(fields).Info("update is available")
 	case result.PossibleRollback:
 		input.Logger.WithFields(fields).Warn("possible rollback detected")
-		rollbackAllowed, err := promptRollbackConfirmation(input.In, input.Out, result.UpdateURL)
+		rollbackAllowed, err := promptRollbackConfirmation(input.In, input.Out, updateURL)
 		if err != nil {
 			return err
 		}
@@ -154,7 +119,7 @@ func Run(input Input) error {
 		return nil
 	}
 
-	if strings.TrimSpace(result.UpdateURL) == "" {
+	if strings.TrimSpace(updateURL) == "" {
 		return errors.New("update is available but update_url is empty")
 	}
 
@@ -163,16 +128,16 @@ func Run(input Input) error {
 
 	var downloadPath string
 	if runtimeCfg.TUF {
-		downloadPath, err = downloadWithTUF(downloadCtx, result.UpdateURL)
+		downloadPath, err = downloadWithTUF(downloadCtx, updateURL)
 	} else {
-		downloadPath, err = downloadDirect(downloadCtx, result.UpdateURL)
+		downloadPath, err = downloadDirect(downloadCtx, updateURL)
 	}
 	if err != nil {
 		return err
 	}
 
 	input.Logger.WithFields(logrus.Fields{
-		"update_url": result.UpdateURL,
+		"update_url": updateURL,
 		"path":       downloadPath,
 		"tuf":        runtimeCfg.TUF,
 	}).Info("update artifact downloaded")
@@ -188,42 +153,15 @@ func Run(input Input) error {
 	return nil
 }
 
-func decodeCheckVersionResponse(body []byte) (checkVersionResponse, error) {
-	var result checkVersionResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return checkVersionResponse{}, err
+func resolveUpdateURL(resp *faynosync.UpdateResponse) string {
+	if u := strings.TrimSpace(resp.UpdateURL); u != "" {
+		return u
 	}
 
-	if strings.TrimSpace(result.UpdateURL) != "" {
-		return result, nil
-	}
-
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return checkVersionResponse{}, err
-	}
-
-	result.UpdateURL = pickExtendedUpdateURL(raw)
-	return result, nil
-}
-
-func pickExtendedUpdateURL(raw map[string]json.RawMessage) string {
-	keys := make([]string, 0, len(raw))
-	for key := range raw {
-		if strings.HasPrefix(key, "update_url_") {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		var value string
-		if err := json.Unmarshal(raw[key], &value); err != nil {
-			continue
-		}
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
+	// PackageURLs are sorted by package name; pick the first non-empty one.
+	for _, pkg := range resp.PackageURLs {
+		if u := strings.TrimSpace(pkg.URL); u != "" {
+			return u
 		}
 	}
 

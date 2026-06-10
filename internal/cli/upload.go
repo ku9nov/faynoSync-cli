@@ -3,13 +3,13 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -113,7 +113,7 @@ func (a *App) runUpload(args []string) error {
 			"status": resp.StatusCode,
 			"body":   strings.TrimSpace(string(respBody)),
 		}).Error("upload failed")
-		return nil
+		return fmt.Errorf("upload failed with status %d", resp.StatusCode)
 	}
 
 	a.logger.WithFields(map[string]any{
@@ -176,141 +176,49 @@ func appendFilePart(writer *multipart.Writer, path string) error {
 	return err
 }
 
+type repeatedString []string
+
+func (r *repeatedString) String() string { return strings.Join(*r, ",") }
+
+func (r *repeatedString) Set(value string) error {
+	*r = append(*r, value)
+	return nil
+}
+
 func parseUploadFlags(args []string) (uploadFlags, error) {
-	var out uploadFlags
-	for i := 0; i < len(args); i++ {
-		arg := strings.TrimSpace(args[i])
-		switch {
-		case arg == "-h" || arg == "--help" || arg == "help":
-			return uploadFlags{}, errUploadHelp
-		case arg == "--app":
-			val, consumed, err := requireValue(args, i, "--app")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.AppName = val
-			i += consumed
-		case strings.HasPrefix(arg, "--app="):
-			out.AppName = strings.TrimPrefix(arg, "--app=")
-		case arg == "--file":
-			val, consumed, err := requireValue(args, i, "--file")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Files = append(out.Files, val)
-			i += consumed
-		case strings.HasPrefix(arg, "--file="):
-			out.Files = append(out.Files, strings.TrimPrefix(arg, "--file="))
-		case arg == "--version":
-			val, consumed, err := requireValue(args, i, "--version")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Version = val
-			i += consumed
-		case strings.HasPrefix(arg, "--version="):
-			out.Version = strings.TrimPrefix(arg, "--version=")
-		case arg == "--channel":
-			val, consumed, err := requireValue(args, i, "--channel")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Channel = val
-			i += consumed
-		case strings.HasPrefix(arg, "--channel="):
-			out.Channel = strings.TrimPrefix(arg, "--channel=")
-		case arg == "--platform":
-			val, consumed, err := requireValue(args, i, "--platform")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Platform = val
-			i += consumed
-		case strings.HasPrefix(arg, "--platform="):
-			out.Platform = strings.TrimPrefix(arg, "--platform=")
-		case arg == "--arch":
-			val, consumed, err := requireValue(args, i, "--arch")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Arch = val
-			i += consumed
-		case strings.HasPrefix(arg, "--arch="):
-			out.Arch = strings.TrimPrefix(arg, "--arch=")
-		case arg == "--publish":
-			val, consumed, err := parseBoolValue(args, i, "--publish")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Publish = val
-			i += consumed
-		case strings.HasPrefix(arg, "--publish="):
-			val, err := parseBool(strings.TrimPrefix(arg, "--publish="), "--publish")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Publish = val
-		case arg == "--critical":
-			val, consumed, err := parseBoolValue(args, i, "--critical")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Critical = val
-			i += consumed
-		case strings.HasPrefix(arg, "--critical="):
-			val, err := parseBool(strings.TrimPrefix(arg, "--critical="), "--critical")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Critical = val
-		case arg == "--intermediate":
-			val, consumed, err := parseBoolValue(args, i, "--intermediate")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Intermediate = val
-			i += consumed
-		case strings.HasPrefix(arg, "--intermediate="):
-			val, err := parseBool(strings.TrimPrefix(arg, "--intermediate="), "--intermediate")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Intermediate = val
-		case arg == "--changelog":
-			val, consumed, err := requireValue(args, i, "--changelog")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.Changelog = val
-			i += consumed
-		case strings.HasPrefix(arg, "--changelog="):
-			out.Changelog = strings.TrimPrefix(arg, "--changelog=")
-		case arg == "--changelog-file":
-			val, consumed, err := requireValue(args, i, "--changelog-file")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.ChangelogFile = val
-			i += consumed
-		case strings.HasPrefix(arg, "--changelog-file="):
-			out.ChangelogFile = strings.TrimPrefix(arg, "--changelog-file=")
-		case arg == "--changelog-stdin":
-			val, consumed, err := parseBoolValue(args, i, "--changelog-stdin")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.ChangelogStdin = val
-			i += consumed
-		case strings.HasPrefix(arg, "--changelog-stdin="):
-			val, err := parseBool(strings.TrimPrefix(arg, "--changelog-stdin="), "--changelog-stdin")
-			if err != nil {
-				return uploadFlags{}, err
-			}
-			out.ChangelogStdin = val
-		default:
-			return uploadFlags{}, fmt.Errorf("unknown upload flag: %s", arg)
-		}
+	if len(args) == 1 && args[0] == "help" {
+		return uploadFlags{}, errUploadHelp
 	}
+
+	var out uploadFlags
+	var files repeatedString
+
+	fs := flag.NewFlagSet("upload", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&out.AppName, "app", "", "")
+	fs.Var(&files, "file", "")
+	fs.StringVar(&out.Version, "version", "", "")
+	fs.StringVar(&out.Channel, "channel", "", "")
+	fs.StringVar(&out.Platform, "platform", "", "")
+	fs.StringVar(&out.Arch, "arch", "", "")
+	fs.BoolVar(&out.Publish, "publish", false, "")
+	fs.BoolVar(&out.Critical, "critical", false, "")
+	fs.BoolVar(&out.Intermediate, "intermediate", false, "")
+	fs.StringVar(&out.Changelog, "changelog", "", "")
+	fs.StringVar(&out.ChangelogFile, "changelog-file", "", "")
+	fs.BoolVar(&out.ChangelogStdin, "changelog-stdin", false, "")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return uploadFlags{}, errUploadHelp
+		}
+		return uploadFlags{}, err
+	}
+	if fs.NArg() > 0 {
+		return uploadFlags{}, fmt.Errorf("unexpected argument: %s", fs.Arg(0))
+	}
+
+	out.Files = files
 
 	if err := validateChangelogInputMode(out); err != nil {
 		return uploadFlags{}, err
@@ -368,60 +276,14 @@ func normalizeChangelog(in string) string {
 }
 
 func extractUploadedID(respBody []byte) string {
-	var flat map[string]any
-	if err := json.Unmarshal(respBody, &flat); err != nil {
+	var resp struct {
+		Uploaded string `json:"uploadResult.Uploaded"`
+	}
+	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return ""
 	}
 
-	if id, ok := flat["uploadResult.Uploaded"].(string); ok {
-		return strings.TrimSpace(id)
-	}
-
-	if nested, ok := flat["uploadResult"].(map[string]any); ok {
-		if id, ok := nested["Uploaded"].(string); ok {
-			return strings.TrimSpace(id)
-		}
-		if id, ok := nested["uploaded"].(string); ok {
-			return strings.TrimSpace(id)
-		}
-	}
-
-	if id, ok := flat["uploaded_id"].(string); ok {
-		return strings.TrimSpace(id)
-	}
-
-	return ""
-}
-
-func requireValue(args []string, idx int, name string) (string, int, error) {
-	if idx+1 >= len(args) {
-		return "", 0, fmt.Errorf("missing value for %s", name)
-	}
-	next := strings.TrimSpace(args[idx+1])
-	if strings.HasPrefix(next, "-") {
-		return "", 0, fmt.Errorf("missing value for %s", name)
-	}
-	return next, 1, nil
-}
-
-func parseBoolValue(args []string, idx int, name string) (bool, int, error) {
-	if idx+1 < len(args) && !strings.HasPrefix(strings.TrimSpace(args[idx+1]), "-") {
-		val, err := parseBool(strings.TrimSpace(args[idx+1]), name)
-		if err != nil {
-			return false, 0, err
-		}
-		return val, 1, nil
-	}
-
-	return true, 0, nil
-}
-
-func parseBool(value, name string) (bool, error) {
-	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
-	if err != nil {
-		return false, fmt.Errorf("invalid boolean value for %s: %q", name, value)
-	}
-	return parsed, nil
+	return strings.TrimSpace(resp.Uploaded)
 }
 
 func (a *App) printUploadUsage() {

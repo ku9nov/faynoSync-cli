@@ -3,6 +3,7 @@ module faynoSync-cli
 go 1.25.5
 
 require (
+	github.com/ku9nov/faynosync-sdk-go v0.1.0
 	github.com/sigstore/sigstore v1.10.4
 	github.com/sirupsen/logrus v1.9.4
 	github.com/theupdateframework/go-tuf/v2 v2.4.1

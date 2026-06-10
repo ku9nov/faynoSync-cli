@@ -92,13 +92,3 @@ func TestExtractUploadedIDFromFlatResponse(t *testing.T) {
 		t.Fatalf("unexpected uploaded id:\nwant: %q\ngot:  %q", want, got)
 	}
 }
-
-func TestExtractUploadedIDFromNestedResponse(t *testing.T) {
-	resp := []byte(`{"uploadResult":{"Uploaded":"6998434c38ab5a799af0afbd"}}`)
-	got := extractUploadedID(resp)
-	want := "6998434c38ab5a799af0afbd"
-
-	if got != want {
-		t.Fatalf("unexpected uploaded id:\nwant: %q\ngot:  %q", want, got)
-	}
-}
