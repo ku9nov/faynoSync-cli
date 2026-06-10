@@ -120,6 +120,11 @@ func (a *App) initConfig() error {
 		return err
 	}
 	a.logger.WithField("owner", owner).Debug("Owner value")
+	edge, err := a.promptValueWithDefault("edge", "")
+	if err != nil {
+		return err
+	}
+	a.logger.WithField("edge", edge).Debug("Edge value")
 	tuf, err := a.promptBoolWithDefault("tuf", false)
 	if err != nil {
 		return err
@@ -128,6 +133,7 @@ func (a *App) initConfig() error {
 	path, err = config.Init(config.Config{
 		Server: server,
 		Owner:  owner,
+		Edge:   edge,
 		TUF:    tuf,
 	})
 	if err != nil {
@@ -155,7 +161,7 @@ func (a *App) viewConfig() error {
 
 func (a *App) setConfig(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: faynosync config set <server|owner|tuf> [value]")
+		return errors.New("usage: faynosync config set <server|owner|edge|tuf> [value]")
 	}
 
 	key := args[0]
@@ -252,7 +258,7 @@ Global flags:
 Commands:
   faynosync init
   faynosync config view
-  faynosync config set <server|owner|tuf> [value]
+  faynosync config set <server|owner|edge|tuf> [value]
   faynosync upload [flags]
   faynosync upgrade
   faynosync version`)
@@ -263,7 +269,7 @@ func (a *App) printConfigUsage() {
 
 Usage:
   faynosync config view
-  faynosync config set <server|owner|tuf> [value]`)
+  faynosync config set <server|owner|edge|tuf> [value]`)
 }
 
 func (a *App) printVersion() {

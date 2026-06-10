@@ -21,11 +21,13 @@ const (
 	EnvToken   = "FAYNOSYNC_TOKEN"
 	EnvURL     = "FAYNOSYNC_URL"
 	EnvAccount = "FAYNOSYNC_ACCOUNT"
+	EnvEdge    = "FAYNOSYNC_EDGE"
 )
 
 type Config struct {
 	Server string `yaml:"server"`
 	Owner  string `yaml:"owner"`
+	Edge   string `yaml:"edge,omitempty"`
 	TUF    bool   `yaml:"tuf"`
 }
 
@@ -33,12 +35,14 @@ type RuntimeConfig struct {
 	Token  string
 	Server string
 	Owner  string
+	Edge   string
 	TUF    bool
 }
 
 type PublicRuntimeConfig struct {
 	Server string
 	Owner  string
+	Edge   string
 	TUF    bool
 }
 
@@ -156,6 +160,8 @@ func UpdateField(cfg *Config, key, value string) error {
 		cfg.Server = value
 	case "owner":
 		cfg.Owner = value
+	case "edge":
+		cfg.Edge = value
 	case "tuf":
 		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
 		if err != nil {
@@ -163,7 +169,7 @@ func UpdateField(cfg *Config, key, value string) error {
 		}
 		cfg.TUF = parsed
 	default:
-		return fmt.Errorf("unknown key: %s (allowed: server, owner, tuf)", key)
+		return fmt.Errorf("unknown key: %s (allowed: server, owner, edge, tuf)", key)
 	}
 
 	return nil
@@ -179,35 +185,33 @@ func LoadRuntime() (RuntimeConfig, string, error) {
 		return RuntimeConfig{}, "", fmt.Errorf("%s is required", EnvToken)
 	}
 
-	server, owner, tuf, path, err := resolveServerAndOwnerAndTUF()
+	resolved, path, err := resolveRuntime()
 	if err != nil {
 		return RuntimeConfig{}, path, err
 	}
 
 	return RuntimeConfig{
 		Token:  token,
-		Server: server,
-		Owner:  owner,
-		TUF:    tuf,
+		Server: resolved.Server,
+		Owner:  resolved.Owner,
+		Edge:   resolved.Edge,
+		TUF:    resolved.TUF,
 	}, path, nil
 }
 
 func LoadPublicRuntime() (PublicRuntimeConfig, string, error) {
-	server, owner, tuf, path, err := resolveServerAndOwnerAndTUF()
+	resolved, path, err := resolveRuntime()
 	if err != nil {
 		return PublicRuntimeConfig{}, path, err
 	}
 
-	return PublicRuntimeConfig{
-		Server: server,
-		Owner:  owner,
-		TUF:    tuf,
-	}, path, nil
+	return resolved, path, nil
 }
 
-func resolveServerAndOwnerAndTUF() (string, string, bool, string, error) {
+func resolveRuntime() (PublicRuntimeConfig, string, error) {
 	envServer := strings.TrimSpace(os.Getenv(EnvURL))
 	envOwner := strings.TrimSpace(os.Getenv(EnvAccount))
+	envEdge := strings.TrimSpace(os.Getenv(EnvEdge))
 	needsConfig := envServer == "" || envOwner == ""
 
 	cfg := Config{}
@@ -216,7 +220,7 @@ func resolveServerAndOwnerAndTUF() (string, string, bool, string, error) {
 		var err error
 		cfg, path, err = Load()
 		if err != nil {
-			return "", "", false, "", err
+			return PublicRuntimeConfig{}, "", err
 		}
 	}
 
@@ -230,12 +234,22 @@ func resolveServerAndOwnerAndTUF() (string, string, bool, string, error) {
 		owner = strings.TrimSpace(cfg.Owner)
 	}
 
-	if server == "" {
-		return "", "", false, path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
-	}
-	if owner == "" {
-		return "", "", false, path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
+	edge := envEdge
+	if edge == "" {
+		edge = strings.TrimSpace(cfg.Edge)
 	}
 
-	return server, owner, cfg.TUF, path, nil
+	if server == "" {
+		return PublicRuntimeConfig{}, path, errors.New("server is empty: set in config or via FAYNOSYNC_URL")
+	}
+	if owner == "" {
+		return PublicRuntimeConfig{}, path, errors.New("owner is empty: set in config or via FAYNOSYNC_ACCOUNT")
+	}
+
+	return PublicRuntimeConfig{
+		Server: server,
+		Owner:  owner,
+		Edge:   edge,
+		TUF:    cfg.TUF,
+	}, path, nil
 }

@@ -67,7 +67,10 @@ func Run(input Input) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	client := faynosync.NewClient(faynosync.Config{BaseURL: runtimeCfg.Server})
+	client := faynosync.NewClient(faynosync.Config{
+		BaseURL: runtimeCfg.Server,
+		EdgeURL: runtimeCfg.Edge,
+	})
 	result, err := client.CheckForUpdates(ctx, faynosync.CheckOptions{
 		Owner:    runtimeCfg.Owner,
 		AppName:  defaultAppName,
@@ -94,6 +97,7 @@ func Run(input Input) error {
 		"platform":          platform,
 		"arch":              arch,
 		"owner":             runtimeCfg.Owner,
+		"source":            sourceLabel(result.Source),
 		"update_available":  result.UpdateAvailable,
 		"possible_rollback": result.PossibleRollback,
 		"critical":          result.Critical,
@@ -151,6 +155,17 @@ func Run(input Input) error {
 	}).Info("cli binary updated")
 
 	return nil
+}
+
+func sourceLabel(source faynosync.UpdateSource) string {
+	switch source {
+	case faynosync.SourceEdge:
+		return "edge"
+	case faynosync.SourceAPI:
+		return "api"
+	default:
+		return "unknown"
+	}
 }
 
 func resolveUpdateURL(resp *faynosync.UpdateResponse) string {
