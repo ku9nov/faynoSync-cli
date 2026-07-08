@@ -134,6 +134,10 @@ go run main.go upload \
 EOF
 ```
 
+## CI / Jenkins
+
+A ready-to-use Jenkins Shared Library step wrapping `faynosync upload`, with setup instructions, lives in [`examples/jenkins`](./examples/jenkins).
+
 ## Build and run
 
 ```bash
