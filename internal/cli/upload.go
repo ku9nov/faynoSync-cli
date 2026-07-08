@@ -25,6 +25,8 @@ type uploadFlags struct {
 	Channel        string
 	Platform       string
 	Arch           string
+	Updater        string
+	Signature      string
 	Publish        bool
 	Critical       bool
 	Intermediate   bool
@@ -42,7 +44,18 @@ type uploadData struct {
 	Intermediate bool   `json:"intermediate"`
 	Platform     string `json:"platform"`
 	Arch         string `json:"arch"`
+	Updater      string `json:"updater,omitempty"`
+	Signature    string `json:"signature,omitempty"`
 	Changelog    string `json:"changelog"`
+}
+
+var validUpdaters = map[string]bool{
+	"manual":           true,
+	"velopack":         true,
+	"squirrel_darwin":  true,
+	"squirrel_windows": true,
+	"electron-builder": true,
+	"tauri":            true,
 }
 
 func (a *App) runUpload(args []string) error {
@@ -79,6 +92,8 @@ func (a *App) runUpload(args []string) error {
 		Intermediate: flags.Intermediate,
 		Platform:     flags.Platform,
 		Arch:         flags.Arch,
+		Updater:      flags.Updater,
+		Signature:    flags.Signature,
 		Changelog:    changelog,
 	}
 
@@ -201,6 +216,8 @@ func parseUploadFlags(args []string) (uploadFlags, error) {
 	fs.StringVar(&out.Channel, "channel", "", "")
 	fs.StringVar(&out.Platform, "platform", "", "")
 	fs.StringVar(&out.Arch, "arch", "", "")
+	fs.StringVar(&out.Updater, "updater", "", "")
+	fs.StringVar(&out.Signature, "signature", "", "")
 	fs.BoolVar(&out.Publish, "publish", false, "")
 	fs.BoolVar(&out.Critical, "critical", false, "")
 	fs.BoolVar(&out.Intermediate, "intermediate", false, "")
@@ -223,8 +240,21 @@ func parseUploadFlags(args []string) (uploadFlags, error) {
 	if err := validateChangelogInputMode(out); err != nil {
 		return uploadFlags{}, err
 	}
+	if err := validateUpdater(out.Updater); err != nil {
+		return uploadFlags{}, err
+	}
 
 	return out, nil
+}
+
+func validateUpdater(updater string) error {
+	if updater == "" {
+		return nil
+	}
+	if !validUpdaters[updater] {
+		return fmt.Errorf("invalid updater %q: must be one of manual, velopack, squirrel_darwin, squirrel_windows, electron-builder, tauri", updater)
+	}
+	return nil
 }
 
 func validateChangelogInputMode(flags uploadFlags) error {
@@ -299,6 +329,8 @@ Upload flags:
   --channel <value>
   --platform <value>
   --arch <value>
+  --updater <value>       manual|velopack|squirrel_darwin|squirrel_windows|electron-builder|tauri
+  --signature <value>     Tauri signature (base64, e.g. --signature "$(cat myapp.app.tar.gz.sig)")
   --publish[=true|false]
   --critical[=true|false]
   --intermediate[=true|false]

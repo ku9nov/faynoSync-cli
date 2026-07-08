@@ -53,6 +53,8 @@ Core flags:
 - `--channel <value>`
 - `--platform <value>`
 - `--arch <value>`
+- `--updater <value>` where value is `manual|velopack|squirrel_darwin|squirrel_windows|electron-builder|tauri` (validated locally)
+- `--signature <value>` Tauri base64 signature (e.g. `--signature "$(cat myapp.app.tar.gz.sig)"`)
 - `--publish[=true|false]`
 - `--critical[=true|false]`
 - `--intermediate[=true|false]`
@@ -80,6 +82,17 @@ faynosync upload \
   --changelog "Bugfixes"
 
 faynosync upload --file ./test.rpm --file ./test.deb --app myapp --publish=true
+
+faynosync upload \
+  --app myapp \
+  --file ./myapp.app.tar.gz \
+  --version 1.0.0 \
+  --channel stable \
+  --platform darwin \
+  --arch amd64 \
+  --updater tauri \
+  --signature "$(cat ./myapp.app.tar.gz.sig)" \
+  --publish
 
 faynosync upload --file ./test.rpm --app myapp --changelog-file ./CHANGELOG.md
 

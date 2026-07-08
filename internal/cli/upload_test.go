@@ -49,6 +49,29 @@ func TestParseUploadFlagsRejectsMultipleChangelogSources(t *testing.T) {
 	}
 }
 
+func TestParseUploadFlagsAcceptsValidUpdater(t *testing.T) {
+	got, err := parseUploadFlags([]string{
+		"--file", "./artifact.bin",
+		"--updater", "electron-builder",
+	})
+	if err != nil {
+		t.Fatalf("parseUploadFlags returned error: %v", err)
+	}
+	if got.Updater != "electron-builder" {
+		t.Fatalf("unexpected updater: %q", got.Updater)
+	}
+}
+
+func TestParseUploadFlagsRejectsInvalidUpdater(t *testing.T) {
+	_, err := parseUploadFlags([]string{
+		"--file", "./artifact.bin",
+		"--updater", "sparkle",
+	})
+	if err == nil {
+		t.Fatal("expected invalid updater error")
+	}
+}
+
 func TestResolveChangelogFromFile(t *testing.T) {
 	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, "CHANGELOG.md")

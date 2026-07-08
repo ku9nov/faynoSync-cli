@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+
+- Added `--updater` flag to `upload` for selecting the updater type (`manual`, `velopack`, `squirrel_darwin`, `squirrel_windows`, `electron-builder`, `tauri`); the value is validated locally and sent in the upload `data`.
+- Added `--signature` flag to `upload` for passing the Tauri base64 signature in the upload `data`.
+
 ## 0.13.0
 
 - Added a persistent per-device ID, stored in the config directory and sent as the `X-Device-ID` header on update checks.
