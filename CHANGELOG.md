@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.0
+
+- Added a composite GitHub Action (`action.yml`) that uploads to faynoSync using the prebuilt CLI binary matching the runner OS/arch; includes an example workflow and README docs.
+- Added a `publish-to-faynosync` release job that dogfoods the action by uploading each platform's binary after every release, on native runners.
+- Switched release tags to the `v` prefix (e.g. `v1.0.0`); the faynoSync upload and embedded binary version stay unprefixed.
+
 ## 0.16.0
 
 - Simplified the release `publish-to-faynosync` job to run uploads on native runners for each platform, dropping the unreliable `macos-13` and `windows-11-arm` runners.

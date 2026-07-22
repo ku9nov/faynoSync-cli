@@ -95,10 +95,11 @@ runs:
         repo="${ACTION_REPO:-ku9nov/faynoSync-cli}"
         ref="${CLI_VERSION:-$ACTION_REF}"
 
-        if [ -z "$ref" ] || [ "$ref" = "main" ]; then
-          url="https://github.com/${repo}/releases/latest/download/${asset}"
-        else
+        # Only an exact vX.Y.Z / X.Y.Z tag maps to a release; floating tags (v1), main, or a branch fall back to latest
+        if printf '%s' "$ref" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
           url="https://github.com/${repo}/releases/download/${ref}/${asset}"
+        else
+          url="https://github.com/${repo}/releases/latest/download/${asset}"
         fi
 
         bin="${RUNNER_TEMP}/faynosync-cli${ext}"
