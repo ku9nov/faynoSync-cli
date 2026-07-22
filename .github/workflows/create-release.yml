@@ -10,6 +10,8 @@ jobs:
     if: |
       contains(github.event.head_commit.message, 'commit new version') == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       release_upload_url: ${{ steps.create-release.outputs.upload_url }}
       version: ${{ steps.extract-version.outputs.version }}
@@ -46,6 +48,15 @@ jobs:
           body_path: ${{ steps.extract-changelog.outputs.changelog_file }}
           draft: false
           prerelease: false
+
+      - name: Move major tag
+        env:
+          VERSION: ${{ steps.extract-version.outputs.version }}
+        run: |
+          # v1.2.3 -> v1 ; keep the floating major tag on the latest release
+          major="${VERSION%%.*}"
+          git tag -f "$major"
+          git push -f origin "$major"
 
   build-and-upload:
     if: |

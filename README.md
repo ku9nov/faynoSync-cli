@@ -140,7 +140,7 @@ This repository ships a composite action (`action.yml` in the repo root). It dow
 
 ```yaml
 - name: Upload to faynoSync
-  uses: ku9nov/faynoSync-cli@0.14.0
+  uses: ku9nov/faynoSync-cli@v1
   with:
     app: myapp
     file: |
@@ -160,7 +160,7 @@ This repository ships a composite action (`action.yml` in the repo root). It dow
 
 Notes:
 
-- Pin the action to a release tag (e.g. `@0.14.0`); the CLI binary version is derived from that tag. Override it with the `cli-version` input if needed.
+- Pin the action to the floating major tag `@v1` to get patches automatically, or to an exact release like `@v1.0.0`. The CLI binary version is derived from that tag (`@v1` resolves to the latest release). Override it with the `cli-version` input if needed.
 - `file` accepts multiple paths (one per line) — each becomes a separate `--file`.
 - `FAYNOSYNC_TOKEN` is required. `FAYNOSYNC_URL` and `FAYNOSYNC_ACCOUNT` override the config `server`/`owner`. Keep all three in `secrets` — values referenced via `${{ secrets.* }}` are automatically masked in logs, and the CLI never prints the token or server URL.
 - Boolean inputs: `publish`, `critical`, `intermediate` (add the flag when `true`).

@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.1
+
+- Automated moving the floating major tag (`v1`) to the latest release in the release workflow.
+- Made the action fall back to the latest release for floating/non-exact refs (`@v1`, `@main`), so only exact `vX.Y.Z` tags map to a specific release.
+- Documented pinning to `@v1` (floating) or `@v1.0.0` (exact) in the README and example workflow.
+
 ## v1.0.0
 
 - Added a composite GitHub Action (`action.yml`) that uploads to faynoSync using the prebuilt CLI binary matching the runner OS/arch; includes an example workflow and README docs.

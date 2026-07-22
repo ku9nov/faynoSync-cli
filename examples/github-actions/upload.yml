@@ -14,7 +14,7 @@ jobs:
       # ... build your artifact into ./dist here ...
 
       - name: Upload to faynoSync
-        uses: ku9nov/faynoSync-cli@0.14.0
+        uses: ku9nov/faynoSync-cli@v1
         with:
           app: myapp
           file: |
