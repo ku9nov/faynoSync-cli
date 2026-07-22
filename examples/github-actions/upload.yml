@@ -1,0 +1,32 @@
+name: Upload to faynoSync
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ... build your artifact into ./dist here ...
+
+      - name: Upload to faynoSync
+        uses: ku9nov/faynoSync-cli@0.14.0
+        with:
+          app: myapp
+          file: |
+            ./dist/myapp.deb
+            ./dist/myapp.rpm
+          version: ${{ github.ref_name }}
+          channel: stable
+          platform: linux
+          arch: amd64
+          publish: true
+          changelog-file: ./CHANGELOG.md
+        env:
+          FAYNOSYNC_TOKEN: ${{ secrets.FAYNOSYNC_TOKEN }}
+          FAYNOSYNC_URL: ${{ secrets.FAYNOSYNC_URL }}
+          FAYNOSYNC_ACCOUNT: ${{ secrets.FAYNOSYNC_ACCOUNT }}

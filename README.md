@@ -134,6 +134,38 @@ go run main.go upload \
 EOF
 ```
 
+## CI / GitHub Actions
+
+This repository ships a composite action (`action.yml` in the repo root). It downloads the prebuilt CLI binary matching the runner OS/arch from the release you pin to, then runs `faynosync upload`. No Go toolchain is needed on the runner.
+
+```yaml
+- name: Upload to faynoSync
+  uses: ku9nov/faynoSync-cli@0.14.0
+  with:
+    app: myapp
+    file: |
+      ./dist/myapp.deb
+      ./dist/myapp.rpm
+    version: 1.2.3
+    channel: stable
+    platform: linux
+    arch: amd64
+    publish: true
+    changelog-file: ./CHANGELOG.md
+  env:
+    FAYNOSYNC_TOKEN: ${{ secrets.FAYNOSYNC_TOKEN }}
+    FAYNOSYNC_URL: ${{ secrets.FAYNOSYNC_URL }}
+    FAYNOSYNC_ACCOUNT: ${{ secrets.FAYNOSYNC_ACCOUNT }}
+```
+
+Notes:
+
+- Pin the action to a release tag (e.g. `@0.14.0`); the CLI binary version is derived from that tag. Override it with the `cli-version` input if needed.
+- `file` accepts multiple paths (one per line) — each becomes a separate `--file`.
+- `FAYNOSYNC_TOKEN` is required. `FAYNOSYNC_URL` and `FAYNOSYNC_ACCOUNT` override the config `server`/`owner`. Keep all three in `secrets` — values referenced via `${{ secrets.* }}` are automatically masked in logs, and the CLI never prints the token or server URL.
+- Boolean inputs: `publish`, `critical`, `intermediate` (add the flag when `true`).
+- A full example workflow lives in [`examples/github-actions`](./examples/github-actions).
+
 ## CI / Jenkins
 
 A ready-to-use Jenkins Shared Library step wrapping `faynosync upload`, with setup instructions, lives in [`examples/jenkins`](./examples/jenkins).

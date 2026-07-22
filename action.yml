@@ -1,0 +1,149 @@
+name: 'faynoSync Upload'
+description: 'Upload application versions to faynoSync using the prebuilt faynosync CLI'
+author: 'ku9nov'
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+
+inputs:
+  app:
+    description: 'Application name'
+    required: true
+  file:
+    description: 'Path to the file to upload. For multiple files put one path per line.'
+    required: true
+  version:
+    description: 'Version value'
+    required: true
+    default: ''
+  channel:
+    description: 'Release channel'
+    required: false
+    default: ''
+  platform:
+    description: 'Target platform'
+    required: false
+    default: ''
+  arch:
+    description: 'Target architecture'
+    required: false
+    default: ''
+  updater:
+    description: 'manual|velopack|squirrel_darwin|squirrel_windows|electron-builder|tauri'
+    required: false
+    default: ''
+  signature:
+    description: 'Tauri base64 signature'
+    required: false
+    default: ''
+  publish:
+    description: 'Mark the upload as published'
+    required: false
+    default: 'false'
+  critical:
+    description: 'Mark the upload as critical'
+    required: false
+    default: 'false'
+  intermediate:
+    description: 'Mark the upload as intermediate'
+    required: false
+    default: 'false'
+  changelog:
+    description: 'Changelog text (mutually exclusive with changelog-file)'
+    required: false
+    default: ''
+  changelog-file:
+    description: 'Path to a changelog file (mutually exclusive with changelog)'
+    required: false
+    default: ''
+  log-level:
+    description: 'trace|debug|info|warn|error|fatal|panic'
+    required: false
+    default: 'info'
+  cli-version:
+    description: 'Release tag of faynosync-cli to download. Defaults to the ref this action was called with, then to the latest release.'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download faynosync-cli
+      shell: bash
+      env:
+        CLI_VERSION: ${{ inputs.cli-version }}
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_REPO: ${{ github.action_repository }}
+      run: |
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux)   os=linux ;;
+          macOS)   os=darwin ;;
+          Windows) os=windows ;;
+          *) echo "Unsupported runner OS: $RUNNER_OS" >&2; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64)   arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "Unsupported runner arch: $RUNNER_ARCH" >&2; exit 1 ;;
+        esac
+        ext=""
+        [ "$os" = "windows" ] && ext=".exe"
+        asset="faynosync-cli-${os}-${arch}${ext}"
+
+        repo="${ACTION_REPO:-ku9nov/faynoSync-cli}"
+        ref="${CLI_VERSION:-$ACTION_REF}"
+
+        if [ -z "$ref" ] || [ "$ref" = "main" ]; then
+          url="https://github.com/${repo}/releases/latest/download/${asset}"
+        else
+          url="https://github.com/${repo}/releases/download/${ref}/${asset}"
+        fi
+
+        bin="${RUNNER_TEMP}/faynosync-cli${ext}"
+        echo "Downloading ${url}"
+        curl -fSL --retry 3 "$url" -o "$bin"
+        chmod +x "$bin"
+        echo "FAYNOSYNC_CLI_BIN=${bin}" >> "$GITHUB_ENV"
+
+    - name: Upload
+      shell: bash
+      env:
+        IN_APP: ${{ inputs.app }}
+        IN_FILE: ${{ inputs.file }}
+        IN_VERSION: ${{ inputs.version }}
+        IN_CHANNEL: ${{ inputs.channel }}
+        IN_PLATFORM: ${{ inputs.platform }}
+        IN_ARCH: ${{ inputs.arch }}
+        IN_UPDATER: ${{ inputs.updater }}
+        IN_SIGNATURE: ${{ inputs.signature }}
+        IN_PUBLISH: ${{ inputs.publish }}
+        IN_CRITICAL: ${{ inputs.critical }}
+        IN_INTERMEDIATE: ${{ inputs.intermediate }}
+        IN_CHANGELOG: ${{ inputs.changelog }}
+        IN_CHANGELOG_FILE: ${{ inputs.changelog-file }}
+        IN_LOG_LEVEL: ${{ inputs.log-level }}
+      run: |
+        set -euo pipefail
+
+        args=(--log-level "$IN_LOG_LEVEL" upload --app "$IN_APP")
+
+        while IFS= read -r f; do
+          [ -z "$f" ] && continue
+          args+=(--file "$f")
+        done <<< "$IN_FILE"
+
+        [ -n "$IN_VERSION" ]        && args+=(--version "$IN_VERSION")
+        [ -n "$IN_CHANNEL" ]        && args+=(--channel "$IN_CHANNEL")
+        [ -n "$IN_PLATFORM" ]       && args+=(--platform "$IN_PLATFORM")
+        [ -n "$IN_ARCH" ]           && args+=(--arch "$IN_ARCH")
+        [ -n "$IN_UPDATER" ]        && args+=(--updater "$IN_UPDATER")
+        [ -n "$IN_SIGNATURE" ]      && args+=(--signature "$IN_SIGNATURE")
+        [ -n "$IN_CHANGELOG" ]      && args+=(--changelog "$IN_CHANGELOG")
+        [ -n "$IN_CHANGELOG_FILE" ] && args+=(--changelog-file "$IN_CHANGELOG_FILE")
+        [ "$IN_PUBLISH" = "true" ]      && args+=(--publish)
+        [ "$IN_CRITICAL" = "true" ]     && args+=(--critical)
+        [ "$IN_INTERMEDIATE" = "true" ] && args+=(--intermediate)
+
+        "$FAYNOSYNC_CLI_BIN" "${args[@]}"

@@ -99,3 +99,48 @@ jobs:
           asset_path: ./faynosync-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           asset_name: faynosync-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           asset_content_type: application/octet-stream
+
+  publish-to-faynosync:
+    if: |
+      contains(github.event.head_commit.message, 'commit new version') == true
+    needs: [create-release, build-and-upload]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    platform: linux,   arch: amd64, ext: "" }
+          - { runner: ubuntu-24.04-arm, platform: linux,   arch: arm64, ext: "" }
+          - { runner: macos-13,         platform: darwin,  arch: amd64, ext: "" }
+          - { runner: macos-latest,     platform: darwin,  arch: arm64, ext: "" }
+          - { runner: windows-latest,   platform: windows, arch: amd64, ext: ".exe" }
+          - { runner: windows-11-arm,   platform: windows, arch: arm64, ext: ".exe" }
+
+    steps:
+      - name: Download release asset and changelog
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ needs.create-release.outputs.version }}" \
+            -R ${{ github.repository }} \
+            --pattern "faynosync-cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+          gh release view "${{ needs.create-release.outputs.version }}" \
+            -R ${{ github.repository }} \
+            --json body -q .body > changelog.txt
+
+      - name: Upload to faynoSync
+        uses: ku9nov/faynoSync-cli@main
+        with:
+          app: faynosync-cli
+          file: ./faynosync-cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+          version: ${{ needs.create-release.outputs.version }}
+          channel: stable
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          publish: true
+          changelog-file: ./changelog.txt
+          cli-version: ${{ needs.create-release.outputs.version }}
+        env:
+          FAYNOSYNC_TOKEN: ${{ secrets.FAYNOSYNC_TOKEN }}
+          FAYNOSYNC_URL: ${{ secrets.FAYNOSYNC_URL }}
+          FAYNOSYNC_ACCOUNT: ${{ secrets.FAYNOSYNC_ACCOUNT }}
