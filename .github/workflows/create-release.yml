@@ -110,10 +110,10 @@ jobs:
         include:
           - { runner: ubuntu-latest,    platform: linux,   arch: amd64, ext: "" }
           - { runner: ubuntu-24.04-arm, platform: linux,   arch: arm64, ext: "" }
-          - { runner: macos-13,         platform: darwin,  arch: amd64, ext: "" }
+          - { runner: macos-latest,     platform: darwin,  arch: amd64, ext: "" }
           - { runner: macos-latest,     platform: darwin,  arch: arm64, ext: "" }
           - { runner: windows-latest,   platform: windows, arch: amd64, ext: ".exe" }
-          - { runner: windows-11-arm,   platform: windows, arch: arm64, ext: ".exe" }
+          - { runner: windows-latest,   platform: windows, arch: arm64, ext: ".exe" }
 
     steps:
       - name: Download release asset and changelog

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0
+
+- Simplified the release `publish-to-faynosync` job to run uploads on native runners for each platform, dropping the unreliable `macos-13` and `windows-11-arm` runners.
+
 ## 0.15.0
 
 - Add github-actions.
