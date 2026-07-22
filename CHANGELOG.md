@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+
+- Add github-actions.
+
 ## 0.14.0
 
 - Added `--updater` flag to `upload` for selecting the updater type (`manual`, `velopack`, `squirrel_darwin`, `squirrel_windows`, `electron-builder`, `tauri`); the value is validated locally and sent in the upload `data`.
