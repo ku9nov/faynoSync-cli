@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.0
+
+- Add `Sparkle` updater.
+
 ## v1.0.1
 
 - Automated moving the floating major tag (`v1`) to the latest release in the release workflow.

@@ -65,7 +65,7 @@ func TestParseUploadFlagsAcceptsValidUpdater(t *testing.T) {
 func TestParseUploadFlagsRejectsInvalidUpdater(t *testing.T) {
 	_, err := parseUploadFlags([]string{
 		"--file", "./artifact.bin",
-		"--updater", "sparkle",
+		"--updater", "not-a-real-updater",
 	})
 	if err == nil {
 		t.Fatal("expected invalid updater error")

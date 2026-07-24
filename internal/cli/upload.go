@@ -56,6 +56,7 @@ var validUpdaters = map[string]bool{
 	"squirrel_windows": true,
 	"electron-builder": true,
 	"tauri":            true,
+	"sparkle":          true,
 }
 
 func (a *App) runUpload(args []string) error {
@@ -252,7 +253,7 @@ func validateUpdater(updater string) error {
 		return nil
 	}
 	if !validUpdaters[updater] {
-		return fmt.Errorf("invalid updater %q: must be one of manual, velopack, squirrel_darwin, squirrel_windows, electron-builder, tauri", updater)
+		return fmt.Errorf("invalid updater %q: must be one of manual, velopack, squirrel_darwin, squirrel_windows, electron-builder, tauri, sparkle", updater)
 	}
 	return nil
 }
@@ -329,7 +330,7 @@ Upload flags:
   --channel <value>
   --platform <value>
   --arch <value>
-  --updater <value>       manual|velopack|squirrel_darwin|squirrel_windows|electron-builder|tauri
+  --updater <value>       manual|velopack|squirrel_darwin|squirrel_windows|electron-builder|tauri|sparkle
   --signature <value>     Tauri signature (base64, e.g. --signature "$(cat myapp.app.tar.gz.sig)")
   --publish[=true|false]
   --critical[=true|false]
